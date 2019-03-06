@@ -3,6 +3,8 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 from obstacle_tower_env import ObstacleTowerEnv
 import numpy as np
+import pygame
+
 
 class GymObstacleTowerEnv(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -24,19 +26,58 @@ class GymObstacleTowerEnv(gym.Env):
                 action_vec.append(int(action // action_count))
                 action = action % action_count
             self.action_table.append(action_vec)
+        self.render_enabled = False
+        self.recent_obs = None
+        self.display = None
+        self.clock = None
+        self.num_key = 0
+        self.remain_time = 0
+        self.last_action = []
+        self.last_action_raw = -1
+
+    def set_render(self, render):
+        if not self.render_enabled and render:
+            pygame.init()
+            pygame.font.init()
+            self.display = pygame.display.set_mode((168*8, 168*5), pygame.HWSURFACE | pygame.DOUBLEBUF)
+            self.clock = pygame.time.Clock()
+
+        self.render_enabled = render
 
     def step(self, action):
         action_vec = self._convert_action(action)
         obs, reward, done, info = self.env.step(action_vec)
-        return np.uint8(obs[0] * 255), reward, done, info
+        rgb = np.uint8(obs[0] * 255)
+
+        self.num_key = obs[1]
+        self.remain_time = obs[2]
+        self.last_action = action_vec
+        self.last_action_raw = action
+
+        if self.render_enabled:
+            self.recent_obs = rgb
+
+        return rgb, reward, done, info
 
     def reset(self):
         obs = self.env.reset()
-        return np.uint8(obs[0] * 255)
+        rgb = np.uint8(obs[0] * 255)
+        if self.render_enabled:
+            self.recent_obs = rgb
+
+        return rgb
         # obs is consist of image, keys, time. Let's use only image for this time
 
     def render(self, mode='human', close=False):
-        pass
+        if self.display is not None and self.recent_obs is not None:
+            obs_surface = pygame.surfarray.make_surface(self.recent_obs.swapaxes(0, 1))
+            obs_surface = pygame.transform.scale(obs_surface, (840, 840))
+            self.display.blit(obs_surface, (0, 0))
+            pygame.display.update()
+            self.clock.tick_busy_loop(20)
+            if int(self.remain_time) % 1 == 0:
+                print('keys: {}, time: {:.2f}, action: {}, action_raw:{}'.format(
+                    self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw))
 
     def _convert_action(self, action):
         return self.action_table[action]
