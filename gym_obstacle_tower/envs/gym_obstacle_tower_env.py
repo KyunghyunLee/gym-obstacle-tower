@@ -11,7 +11,7 @@ class GymObstacleTowerEnv(gym.Env):
     worker_id = 0
 
     def __init__(self):
-        self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=False, realtime_mode=False, worker_id=GymObstacleTowerEnv.worker_id)
+        self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=False, realtime_mode=False, worker_id=GymObstacleTowerEnv.worker_id, timeout_wait=1)
         GymObstacleTowerEnv.worker_id += 1
 
         self.original_action_vec = self.env.action_space.nvec
