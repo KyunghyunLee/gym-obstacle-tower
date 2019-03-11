@@ -11,21 +11,17 @@ class GymObstacleTowerEnv(gym.Env):
     worker_id = 0
 
     def __init__(self):
-        self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=False, realtime_mode=False, worker_id=GymObstacleTowerEnv.worker_id, timeout_wait=1)
-        GymObstacleTowerEnv.worker_id += 1
+        self.local_worker_id = 0
+        while True:
+            try:
+                self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=False, realtime_mode=False, worker_id=self.local_worker_id, timeout_wait=30)
+                break
+            except:
+                self.local_worker_id += 1
 
-        self.original_action_vec = self.env.action_space.nvec
-        self.original_action_count = self.original_action_vec.prod()
-        self.action_space = spaces.Discrete(self.original_action_count)
-        self.action_table = []
-        for action in range(self.original_action_count):
-            action_count = int(self.original_action_count)
-            action_vec = []
-            for current_space in self.original_action_vec:
-                action_count /= current_space
-                action_vec.append(int(action // action_count))
-                action = action % action_count
-            self.action_table.append(action_vec)
+        self.initialized = False
+        self.discrete = False
+
         self.render_enabled = False
         self.recent_obs = None
         self.display = None
@@ -34,6 +30,28 @@ class GymObstacleTowerEnv(gym.Env):
         self.remain_time = 0
         self.last_action = []
         self.last_action_raw = -1
+        self.init()
+
+    def init(self, discrete=False):
+        self.discrete = discrete
+        if discrete:
+            self.original_action_vec = self.env.action_space.nvec
+            self.original_action_count = self.original_action_vec.prod()
+            self.action_space = spaces.Discrete(self.original_action_count)
+            self.action_table = []
+            for action in range(self.original_action_count):
+                action_count = int(self.original_action_count)
+                action_vec = []
+                for current_space in self.original_action_vec:
+                    action_count /= current_space
+                    action_vec.append(int(action // action_count))
+                    action = action % action_count
+                self.action_table.append(action_vec)
+        else:
+            self.action_space = self.env.action_space
+
+        self.observation_space = self.env.observation_space.spaces[0]
+        self.initialized = True
 
     def set_render(self, render):
         if not self.render_enabled and render:
@@ -45,7 +63,14 @@ class GymObstacleTowerEnv(gym.Env):
         self.render_enabled = render
 
     def step(self, action):
-        action_vec = self._convert_action(action)
+        if not self.initialized:
+            self.init()
+
+        if self.discrete:
+            action_vec = self._convert_action(action)
+        else:
+            action_vec = action
+
         obs, reward, done, info = self.env.step(action_vec)
         rgb = np.uint8(obs[0] * 255)
 
@@ -60,6 +85,9 @@ class GymObstacleTowerEnv(gym.Env):
         return rgb, reward, done, info
 
     def reset(self):
+        if not self.initialized:
+            self.init()
+
         obs = self.env.reset()
         rgb = np.uint8(obs[0] * 255)
         if self.render_enabled:
@@ -69,6 +97,12 @@ class GymObstacleTowerEnv(gym.Env):
         # obs is consist of image, keys, time. Let's use only image for this time
 
     def render(self, mode='human', close=False):
+        if not self.initialized:
+            self.init()
+
+        if not self.render_enabled:
+            self.set_render(True)
+
         if self.display is not None and self.recent_obs is not None:
             obs_surface = pygame.surfarray.make_surface(self.recent_obs.swapaxes(0, 1))
             obs_surface = pygame.transform.scale(obs_surface, (840, 840))
@@ -81,6 +115,10 @@ class GymObstacleTowerEnv(gym.Env):
 
     def _convert_action(self, action):
         return self.action_table[action]
+
+    @classmethod
+    def set_workerid(cls, worker_id):
+        cls.worker_id = worker_id
 
 '''
 Action Space Sample
