@@ -21,6 +21,7 @@ class GymObstacleTowerEnv(gym.Env):
 
         self.initialized = False
         self.discrete = False
+        self._seed = None
 
         self.render_enabled = False
         self.recent_obs = None
@@ -30,7 +31,16 @@ class GymObstacleTowerEnv(gym.Env):
         self.remain_time = 0
         self.last_action = []
         self.last_action_raw = -1
+        self.render_timesleep = 20
+
         self.init()
+
+    def set_timesleep(self, timesleep):
+        self.render_timesleep = timesleep
+
+    def seed(self, seed=None):
+        self._seed = seed
+        self.env.seed(seed)
 
     def init(self, discrete=False):
         self.discrete = discrete
@@ -72,7 +82,8 @@ class GymObstacleTowerEnv(gym.Env):
             action_vec = action
 
         obs, reward, done, info = self.env.step(action_vec)
-        rgb = np.uint8(obs[0] * 255)
+        rgb = obs[0]
+        # rgb = np.uint8(obs[0] * 255)
 
         self.num_key = obs[1]
         self.remain_time = obs[2]
@@ -87,9 +98,13 @@ class GymObstacleTowerEnv(gym.Env):
     def reset(self):
         if not self.initialized:
             self.init()
+        if self._seed is not None:
+            print('seed is fixed to {}'.format(self._seed))
+            self.seed(self._seed)
 
         obs = self.env.reset()
-        rgb = np.uint8(obs[0] * 255)
+        # rgb = np.uint8(obs[0] * 255)
+        rgb = obs[0]
         if self.render_enabled:
             self.recent_obs = rgb
 
@@ -104,11 +119,12 @@ class GymObstacleTowerEnv(gym.Env):
             self.set_render(True)
 
         if self.display is not None and self.recent_obs is not None:
-            obs_surface = pygame.surfarray.make_surface(self.recent_obs.swapaxes(0, 1))
+            rgb = np.uint8(self.recent_obs * 255)
+            obs_surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
             obs_surface = pygame.transform.scale(obs_surface, (840, 840))
             self.display.blit(obs_surface, (0, 0))
             pygame.display.update()
-            self.clock.tick_busy_loop(20)
+            self.clock.tick_busy_loop(self.render_timesleep)
             if int(self.remain_time) % 1 == 0:
                 print('keys: {}, time: {:.2f}, action: {}, action_raw:{}'.format(
                     self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw))
