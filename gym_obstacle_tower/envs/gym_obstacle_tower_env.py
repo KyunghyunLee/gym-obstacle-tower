@@ -4,6 +4,7 @@ from gym.utils import seeding
 from obstacle_tower_env import ObstacleTowerEnv
 import numpy as np
 import pygame
+import cv2
 
 
 class GymObstacleTowerEnv(gym.Env):
@@ -36,6 +37,14 @@ class GymObstacleTowerEnv(gym.Env):
         self.action_mask = None
         self.use_action_mask = True
         self.init()
+        self.use_preprocessing = False
+        self.preprocessing_size = None
+        self.game_over = False
+
+    def set_preprocessing(self, size=(84, 84)):
+        self.use_preprocessing = True
+        self.preprocessing_size = size
+        self.observation_space = spaces.Box(shape=size, low=0, high=1, dtype=np.float32)
 
     def get_action_meanings(self):
         action_meanings = [
@@ -109,6 +118,15 @@ class GymObstacleTowerEnv(gym.Env):
 
         self.render_enabled = render
 
+    def preprocessor(self, obs):
+        rgb = obs[0]
+
+        rgb = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+        if rgb.shape[0] != self.preprocessing_size[0] or rgb.shape[1] != self.preprocessing_size[1]:
+            rgb = cv2.resize(rgb, self.preprocessing_size, interpolation=cv2.INTER_AREA)
+        new_obs = (rgb, obs[1], obs[2])
+        return new_obs
+
     def step(self, action):
         if not self.initialized:
             self.init()
@@ -119,6 +137,10 @@ class GymObstacleTowerEnv(gym.Env):
             action_vec = action
 
         obs, reward, done, info = self.env.step(action_vec)
+
+        if self.use_preprocessing:
+            obs = self.preprocessor(obs)
+
         rgb = obs[0]
         # rgb = np.uint8(obs[0] * 255)
 
@@ -129,7 +151,7 @@ class GymObstacleTowerEnv(gym.Env):
 
         if self.render_enabled:
             self.recent_obs = rgb
-
+        self.game_over = done
         return rgb, reward, done, info
 
     def reset(self):
@@ -140,11 +162,14 @@ class GymObstacleTowerEnv(gym.Env):
             self.seed(self._seed)
 
         obs = self.env.reset()
+        if self.use_preprocessing:
+            obs = self.preprocessor(obs)
+
         # rgb = np.uint8(obs[0] * 255)
         rgb = obs[0]
         if self.render_enabled:
             self.recent_obs = rgb
-
+        self.game_over = False
         return rgb
         # obs is consist of image, keys, time. Let's use only image for this time
 
