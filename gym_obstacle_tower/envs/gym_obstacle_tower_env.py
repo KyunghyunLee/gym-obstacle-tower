@@ -32,8 +32,37 @@ class GymObstacleTowerEnv(gym.Env):
         self.last_action = []
         self.last_action_raw = -1
         self.render_timesleep = 20
-
+        self.action_meanings = None
+        self.action_mask = None
+        self.use_action_mask = True
         self.init()
+
+    def get_action_meanings(self):
+        action_meanings = [
+            ['NOOP', 'FORWARD', 'BACKWARD'],
+            ['NOOP', 'CLOCKWISE', 'C_CLOCKWISE'],
+            ['NOOP', 'JUMP'],
+            ['NOOP', 'RIGHT', 'LEFT']
+
+        ]
+        if not self.discrete:
+            self.init(discrete=True)
+
+        if self.action_meanings is None:
+            self.action_meanings = []
+            for i in range(self.original_action_count):
+                if i == 0:
+                    action = 'NOOP'
+                else:
+                    action_vec = self.action_table[i]
+                    action = ''
+                    for j in range(len(self.action_table[0])):
+                        if action_vec[j] != 0:
+                            action += action_meanings[j][action_vec[j]]
+
+                self.action_meanings.append(action)
+
+        return self.action_meanings
 
     def set_timesleep(self, timesleep):
         self.render_timesleep = timesleep
@@ -49,6 +78,7 @@ class GymObstacleTowerEnv(gym.Env):
             self.original_action_count = self.original_action_vec.prod()
             self.action_space = spaces.Discrete(self.original_action_count)
             self.action_table = []
+            self.action_mask = []
             for action in range(self.original_action_count):
                 action_count = int(self.original_action_count)
                 action_vec = []
@@ -57,6 +87,13 @@ class GymObstacleTowerEnv(gym.Env):
                     action_vec.append(int(action // action_count))
                     action = action % action_count
                 self.action_table.append(action_vec)
+                if self.use_action_mask:
+                    if not (action_vec[1] != 0 and action_vec[3] != 0):  # Camera with left or right
+                        self.action_mask.append(action_vec)
+
+            if self.use_action_mask:
+                self.action_space = spaces.Discrete(len(self.action_mask))
+
         else:
             self.action_space = self.env.action_space
 
@@ -130,7 +167,10 @@ class GymObstacleTowerEnv(gym.Env):
                     self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw))
 
     def _convert_action(self, action):
-        return self.action_table[action]
+        if self.use_action_mask:
+            return self.action_mask[action]
+        else:
+            return self.action_table[action]
 
     @classmethod
     def set_workerid(cls, worker_id):
@@ -160,17 +200,17 @@ Action Space Sample
     4 [0, 0, 1, 1]
     5 [0, 0, 1, 2]
     6 [0, 1, 0, 0]
-    7 [0, 1, 0, 1]
-    8 [0, 1, 0, 2]
+    7 [0, 1, 0, 1] x
+    8 [0, 1, 0, 2] x
     9 [0, 1, 1, 0]
-    10[0, 1, 1, 1]
-    11[0, 1, 1, 2]
+    10[0, 1, 1, 1] x
+    11[0, 1, 1, 2] x
     12[0, 2, 0, 0]
-    13[0, 2, 0, 1]
-    14[0, 2, 0, 2]
+    13[0, 2, 0, 1] x 
+    14[0, 2, 0, 2] x
     15[0, 2, 1, 0]
-    16[0, 2, 1, 1]
-    17[0, 2, 1, 2]
+    16[0, 2, 1, 1] x
+    17[0, 2, 1, 2] x
     18[1, 0, 0, 0]
     19[1, 0, 0, 1]
     20[1, 0, 0, 2]
@@ -178,17 +218,17 @@ Action Space Sample
     22[1, 0, 1, 1]
     23[1, 0, 1, 2]
     24[1, 1, 0, 0]
-    25[1, 1, 0, 1]
-    26[1, 1, 0, 2]
+    25[1, 1, 0, 1] x
+    26[1, 1, 0, 2] x
     27[1, 1, 1, 0]
-    28[1, 1, 1, 1]
-    29[1, 1, 1, 2]
+    28[1, 1, 1, 1] x 
+    29[1, 1, 1, 2] x
     30[1, 2, 0, 0]
-    31[1, 2, 0, 1]
-    32[1, 2, 0, 2]
+    31[1, 2, 0, 1] x
+    32[1, 2, 0, 2] x
     33[1, 2, 1, 0]
-    34[1, 2, 1, 1]
-    35[1, 2, 1, 2]
+    34[1, 2, 1, 1] x
+    35[1, 2, 1, 2] x
     36[2, 0, 0, 0]
     37[2, 0, 0, 1]
     38[2, 0, 0, 2]
@@ -196,16 +236,16 @@ Action Space Sample
     40[2, 0, 1, 1]
     41[2, 0, 1, 2]
     42[2, 1, 0, 0]
-    43[2, 1, 0, 1]
-    44[2, 1, 0, 2]
+    43[2, 1, 0, 1] x
+    44[2, 1, 0, 2] x
     45[2, 1, 1, 0]
-    46[2, 1, 1, 1]
-    47[2, 1, 1, 2]
+    46[2, 1, 1, 1] x
+    47[2, 1, 1, 2] x
     48[2, 2, 0, 0]
-    49[2, 2, 0, 1]
-    50[2, 2, 0, 2]
+    49[2, 2, 0, 1] x
+    50[2, 2, 0, 2] x
     51[2, 2, 1, 0]
-    52[2, 2, 1, 1]
-    53[2, 2, 1, 2]
+    52[2, 2, 1, 1] x
+    53[2, 2, 1, 2] x
 
 '''
