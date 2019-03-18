@@ -112,6 +112,7 @@ class GymObstacleTowerEnv(gym.Env):
             #         if not (action_vec[1] != 0 and action_vec[3] != 0):  # Camera with left or right
             #             self.action_mask.append(action_vec)
             self.action_mask = [
+                [0, 0, 0, 0],  # Noop
                 [0, 0, 1, 0],  # Jump
                 [0, 1, 0, 0],  # CW
                 [0, 2, 0, 0],  # CCW
@@ -120,7 +121,9 @@ class GymObstacleTowerEnv(gym.Env):
                 [1, 1, 0, 0],  # Forward CW
                 [1, 2, 0, 0],  # Forward CCW
                 [2, 0, 0, 0],  # Backward
-
+            ]
+            self.action_mast_index = [
+                0, 3, 6, 12, 18, 21, 24, 30, 36
             ]
             if self.use_action_mask:
                 self.action_space = spaces.Discrete(len(self.action_mask))
@@ -163,7 +166,10 @@ class GymObstacleTowerEnv(gym.Env):
         if not self.initialized:
             self.init()
         if self._retro:
-            action_vec = action
+            if self.use_action_mask:
+                action_vec = self.action_mast_index[action]
+            else:
+                action_vec = action
         else:
             if self.discrete:
                 action_vec = self._convert_action(action)
@@ -238,8 +244,8 @@ class GymObstacleTowerEnv(gym.Env):
             pygame.display.update()
             self.clock.tick_busy_loop(self.render_timesleep)
             if int(self.remain_time) % 1 == 0:
-                str1 = '\rkeys: {}, time: {:.2f}, action: {}, action_raw:{}'.format(
-                    self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw)
+                str1 = '\rkeys: {}, time: {:.2f}, action: {}, action_raw:{}, converted_action:{}'.format(
+                    self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw, self._convert_action(self.last_action_raw) )
                 sys.stdout.write(str1)
                 sys.stdout.flush()
                 if self.remain_time == 0:
