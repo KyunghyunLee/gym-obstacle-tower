@@ -5,6 +5,7 @@ from obstacle_tower_env import ObstacleTowerEnv
 import numpy as np
 import pygame
 import cv2
+import sys
 
 
 class GymObstacleTowerEnv(gym.Env):
@@ -13,9 +14,15 @@ class GymObstacleTowerEnv(gym.Env):
 
     def __init__(self):
         self.local_worker_id = 0
+        self._retro = True
+        if self._retro:
+            print('--------------------------------')
+            print('------- Retro Activated --------')
+            print('--------------------------------')
+
         while True:
             try:
-                self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=False, realtime_mode=False, worker_id=self.local_worker_id, timeout_wait=30)
+                self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=self._retro, realtime_mode=False, worker_id=self.local_worker_id, timeout_wait=30)
                 break
             except:
                 self.local_worker_id += 1
@@ -83,92 +90,132 @@ class GymObstacleTowerEnv(gym.Env):
     def init(self, discrete=False):
         self.discrete = discrete
         if discrete:
-            self.original_action_vec = self.env.action_space.nvec
-            self.original_action_count = self.original_action_vec.prod()
+            if self._retro:
+                self.original_action_vec = [3, 3, 2, 3]
+                self.original_action_count = 54
+            else:
+                self.original_action_vec = self.env.action_space.nvec
+                self.original_action_count = self.original_action_vec.prod()
             self.action_space = spaces.Discrete(self.original_action_count)
             self.action_table = []
             self.action_mask = []
-            for action in range(self.original_action_count):
-                action_count = int(self.original_action_count)
-                action_vec = []
-                for current_space in self.original_action_vec:
-                    action_count /= current_space
-                    action_vec.append(int(action // action_count))
-                    action = action % action_count
-                self.action_table.append(action_vec)
-                if self.use_action_mask:
-                    if not (action_vec[1] != 0 and action_vec[3] != 0):  # Camera with left or right
-                        self.action_mask.append(action_vec)
 
+            # for action in range(self.original_action_count):
+            #     action_count = int(self.original_action_count)
+            #     action_vec = []
+            #     for current_space in self.original_action_vec:
+            #         action_count /= current_space
+            #         action_vec.append(int(action // action_count))
+            #         action = action % action_count
+            #     self.action_table.append(action_vec)
+            #     if self.use_action_mask:
+            #         if not (action_vec[1] != 0 and action_vec[3] != 0):  # Camera with left or right
+            #             self.action_mask.append(action_vec)
+            self.action_mask = [
+                [0, 0, 1, 0],  # Jump
+                [0, 1, 0, 0],  # CW
+                [0, 2, 0, 0],  # CCW
+                [1, 0, 0, 0],  # Forward
+                [1, 0, 1, 0],  # Forward Jump
+                [1, 1, 0, 0],  # Forward CW
+                [1, 2, 0, 0],  # Forward CCW
+                [2, 0, 0, 0],  # Backward
+
+            ]
             if self.use_action_mask:
                 self.action_space = spaces.Discrete(len(self.action_mask))
 
         else:
             self.action_space = self.env.action_space
-
-        self.observation_space = self.env.observation_space.spaces[0]
+        if self._retro:
+            self.observation_space = self.env.observation_space
+        else:
+            self.observation_space = self.env.observation_space.spaces[0]
         self.initialized = True
 
     def set_render(self, render):
         if not self.render_enabled and render:
             pygame.init()
             pygame.font.init()
-            self.display = pygame.display.set_mode((168*8, 168*5), pygame.HWSURFACE | pygame.DOUBLEBUF)
+            self.display = pygame.display.set_mode((420, 420), pygame.HWSURFACE | pygame.DOUBLEBUF)
             self.clock = pygame.time.Clock()
 
         self.render_enabled = render
 
     def preprocessor(self, obs):
-        rgb = obs[0]
+        if self._retro:
+            rgb = obs
+        else:
+            rgb = obs[0]
 
         rgb = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
         if rgb.shape[0] != self.preprocessing_size[0] or rgb.shape[1] != self.preprocessing_size[1]:
             rgb = cv2.resize(rgb, self.preprocessing_size, interpolation=cv2.INTER_AREA)
-        new_obs = (rgb, obs[1], obs[2])
+
+        if self._retro:
+            rgb = np.float32(rgb) / 255.0
+            new_obs = rgb
+        else:
+            new_obs = (rgb, obs[1], obs[2])
         return new_obs
 
     def step(self, action):
         if not self.initialized:
             self.init()
-
-        if self.discrete:
-            action_vec = self._convert_action(action)
-        else:
+        if self._retro:
             action_vec = action
+        else:
+            if self.discrete:
+                action_vec = self._convert_action(action)
+            else:
+                action_vec = action
 
         obs, reward, done, info = self.env.step(action_vec)
 
-        if self.use_preprocessing:
-            obs = self.preprocessor(obs)
+        rgb = self._get_obs(obs)
 
-        rgb = obs[0]
-        # rgb = np.uint8(obs[0] * 255)
-
-        self.num_key = obs[1]
-        self.remain_time = obs[2]
+        if self._retro:
+            self.num_key = 0
+            self.remain_time = 1
+        else:
+            self.num_key = obs[1]
+            self.remain_time = obs[2]
         self.last_action = action_vec
         self.last_action_raw = action
 
-        if self.render_enabled:
-            self.recent_obs = rgb
+
         self.game_over = done
         return rgb, reward, done, info
+
+    def _get_obs(self, obs):
+        if self._retro:
+            self.recent_obs = obs
+
+            if self.use_preprocessing:
+                obs = self.preprocessor(obs)
+
+            rgb = obs
+        else:
+            self.recent_obs = obs[0]
+            if self.use_preprocessing:
+                obs = self.preprocessor(obs)
+
+            rgb = obs[0]
+        return rgb
 
     def reset(self):
         if not self.initialized:
             self.init()
         if self._seed is not None:
-            print('seed is fixed to {}'.format(self._seed))
+            # print('seed is fixed to {}'.format(self._seed))
             self.seed(self._seed)
 
         obs = self.env.reset()
-        if self.use_preprocessing:
-            obs = self.preprocessor(obs)
+
 
         # rgb = np.uint8(obs[0] * 255)
-        rgb = obs[0]
-        if self.render_enabled:
-            self.recent_obs = rgb
+        rgb = self._get_obs(obs)
+
         self.game_over = False
         return rgb
         # obs is consist of image, keys, time. Let's use only image for this time
@@ -181,15 +228,23 @@ class GymObstacleTowerEnv(gym.Env):
             self.set_render(True)
 
         if self.display is not None and self.recent_obs is not None:
-            rgb = np.uint8(self.recent_obs * 255)
+            if self._retro:
+                rgb = self.recent_obs
+            else:
+                rgb = np.uint8(self.recent_obs * 255)
             obs_surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
-            obs_surface = pygame.transform.scale(obs_surface, (840, 840))
+            obs_surface = pygame.transform.scale(obs_surface, (420, 420))
             self.display.blit(obs_surface, (0, 0))
             pygame.display.update()
             self.clock.tick_busy_loop(self.render_timesleep)
             if int(self.remain_time) % 1 == 0:
-                print('keys: {}, time: {:.2f}, action: {}, action_raw:{}'.format(
-                    self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw))
+                str1 = '\rkeys: {}, time: {:.2f}, action: {}, action_raw:{}'.format(
+                    self.num_key, self.remain_time / 100, self.last_action, self.last_action_raw)
+                sys.stdout.write(str1)
+                sys.stdout.flush()
+                if self.remain_time == 0:
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
 
     def _convert_action(self, action):
         if self.use_action_mask:
@@ -272,5 +327,48 @@ Action Space Sample
     51[2, 2, 1, 0]
     52[2, 2, 1, 1] x
     53[2, 2, 1, 2] x
+    
+    Reduced Action space
+    
+    0 [0, 0, 0, 0]  Noop
+    1 [0, 0, 0, 1]  Right
+    2 [0, 0, 0, 2]  Left
+    3 [0, 0, 1, 0]  Jump
+    4 [0, 0, 1, 1]  Right Jump
+    5 [0, 0, 1, 2]  Left Jump
+    6 [0, 1, 0, 0]  CW
+    7 [0, 1, 1, 0]  CW Jump
+    8 [0, 2, 0, 0]  CCW
+    9 [0, 2, 1, 0]  CCW Jump
+    10[1, 0, 0, 0]  Forward
+    11[1, 0, 0, 1]  Forward Right
+    12[1, 0, 0, 2]  Forward Left
+    13[1, 0, 1, 0]  Forward Jump
+    14[1, 0, 1, 1]  Forward Jump Right
+    15[1, 0, 1, 2]  Forward Jump Left
+    16[1, 1, 0, 0]  Forward CW
+    17[1, 1, 1, 0]  Forward CW Jump
+    18[1, 2, 0, 0]  Forward CCW
+    19[1, 2, 1, 0]  Forward CCW Jump
+    20[2, 0, 0, 0]  Backward
+    21[2, 0, 0, 1]  Backward Right
+    22[2, 0, 0, 2]  Backward Left
+    23[2, 0, 1, 0]  Backward Jump
+    24[2, 0, 1, 1]  Backward Jump Right
+    25[2, 0, 1, 2]  Backward Jump Left
+    26[2, 1, 0, 0]  Backward CW
+    27[2, 1, 1, 0]  Backward CW Jump
+    28[2, 2, 0, 0]  Backward CCW
+    29[2, 2, 1, 0]  Backward CCW Jump
+    
+    More Reduced Action space
+    0 [0, 0, 1, 0]  Jump
+    1 [0, 1, 0, 0]  CW
+    2 [0, 2, 0, 0]  CCW
+    3 [1, 0, 0, 0]  Forward
+    4 [1, 0, 1, 0]  Forward Jump
+    5 [1, 1, 0, 0]  Forward CW
+    6 [1, 2, 0, 0]  Forward CCW
+    7 [2, 0, 0, 0]  Backward
 
 '''
