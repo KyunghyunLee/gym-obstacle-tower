@@ -47,6 +47,7 @@ class GymObstacleTowerEnv(gym.Env):
         self.use_preprocessing = False
         self.preprocessing_size = None
         self.game_over = False
+        self._random_range = 0
 
     def set_preprocessing(self, size=(84, 84)):
         self.use_preprocessing = True
@@ -82,6 +83,17 @@ class GymObstacleTowerEnv(gym.Env):
 
     def set_timesleep(self, timesleep):
         self.render_timesleep = timesleep
+
+    def new_seed(self):
+        if self._seed is None:
+            if self._random_range == 0:
+                seed = None
+            else:
+                seed = int(np.random.uniform(0, self._random_range))
+        else:
+            seed = self._seed
+
+        return seed
 
     def seed(self, seed=None):
         self._seed = seed
@@ -214,9 +226,9 @@ class GymObstacleTowerEnv(gym.Env):
     def reset(self):
         if not self.initialized:
             self.init()
-        if self._seed is not None:
-            # print('seed is fixed to {}'.format(self._seed))
-            self.env.seed(self._seed)
+
+        seed = self.new_seed()
+        self.env.seed(seed)
 
         obs = self.env.reset()
 
