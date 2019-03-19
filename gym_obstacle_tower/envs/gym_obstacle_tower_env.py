@@ -20,7 +20,7 @@ class GymObstacleTowerEnv(gym.Env):
             print('------- Retro Activated --------')
             print('--------------------------------')
 
-        while True:
+        for retry_count in range(20):
             try:
                 self.env = ObstacleTowerEnv('./ObstacleTower/obstacletower', retro=self._retro, realtime_mode=False, worker_id=self.local_worker_id, timeout_wait=30)
                 break
@@ -88,6 +88,8 @@ class GymObstacleTowerEnv(gym.Env):
         self.env.seed(seed)
 
     def init(self, discrete=False):
+        if self._retro:
+            discrete = True
         self.discrete = discrete
         if discrete:
             if self._retro:
