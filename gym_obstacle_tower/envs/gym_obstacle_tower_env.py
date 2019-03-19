@@ -85,7 +85,7 @@ class GymObstacleTowerEnv(gym.Env):
 
     def seed(self, seed=None):
         self._seed = seed
-        self.env.seed(seed)
+        # self.env.seed(seed)
 
     def init(self, discrete=False):
         if self._retro:
@@ -214,9 +214,9 @@ class GymObstacleTowerEnv(gym.Env):
     def reset(self):
         if not self.initialized:
             self.init()
-        # if self._seed is not None:
-        #     # print('seed is fixed to {}'.format(self._seed))
-        #     self.seed(self._seed)
+        if self._seed is not None:
+            # print('seed is fixed to {}'.format(self._seed))
+            self.seed(self._seed)
 
         obs = self.env.reset()
 
