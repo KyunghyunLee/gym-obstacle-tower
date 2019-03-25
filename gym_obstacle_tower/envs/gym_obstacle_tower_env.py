@@ -6,6 +6,7 @@ import numpy as np
 import pygame
 import cv2
 import sys
+from stable_baselines.common.atari_wrappers import FrameStack
 
 
 class GymObstacleTowerEnv(gym.Env):
@@ -30,6 +31,7 @@ class GymObstacleTowerEnv(gym.Env):
         self.initialized = False
         self.discrete = False
         self._seed = None
+        self._random_range = 0
 
         self.render_enabled = False
         self.recent_obs = None
@@ -43,11 +45,12 @@ class GymObstacleTowerEnv(gym.Env):
         self.action_meanings = None
         self.action_mask = None
         self.use_action_mask = True
+
         self.init()
         self.use_preprocessing = False
         self.preprocessing_size = None
         self.game_over = False
-        self._random_range = 0
+        self.is_frame_stack = False
 
     def set_preprocessing(self, size=(84, 84)):
         self.use_preprocessing = True
@@ -86,8 +89,8 @@ class GymObstacleTowerEnv(gym.Env):
 
     def new_seed(self):
         if self._seed is None:
-            if self._random_range == 0:
-                seed = None
+            if self._random_range == 0 or self._random_range is None:
+                seed = int(np.random.uniform(0, 101))
             else:
                 seed = int(np.random.uniform(0, self._random_range))
         else:
@@ -98,6 +101,11 @@ class GymObstacleTowerEnv(gym.Env):
     def seed(self, seed=None):
         self._seed = seed
         # self.env.seed(seed)
+
+    def frame_stack(self, frames):
+        if not isinstance(self.env, FrameStack):
+            self.env = FrameStack(self.env, frames)
+            self.is_frame_stack = True
 
     def init(self, discrete=False):
         if self._retro:
@@ -209,11 +217,13 @@ class GymObstacleTowerEnv(gym.Env):
 
     def _get_obs(self, obs):
         if self._retro:
-            self.recent_obs = obs
+            if self.is_frame_stack:
+                self.recent_obs = obs[:, :, -3:]
+            else:
+                self.recent_obs = obs
 
             if self.use_preprocessing:
                 obs = self.preprocessor(obs)
-
             rgb = obs
         else:
             self.recent_obs = obs[0]
