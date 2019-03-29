@@ -51,11 +51,13 @@ class GymObstacleTowerEnv(gym.Env):
         self.preprocessing_size = None
         self.game_over = False
         self.is_frame_stack = False
+        self.original_obs = False
+        self.set_preprocessing()
 
     def set_preprocessing(self, size=(84, 84)):
         self.use_preprocessing = True
         self.preprocessing_size = size
-        self.observation_space = spaces.Box(shape=size, low=0, high=1, dtype=np.float32)
+        self.observation_space = spaces.Box(shape=(*size, 1), low=0, high=1, dtype=np.float32)
 
     def get_action_meanings(self):
         action_meanings = [
@@ -176,7 +178,7 @@ class GymObstacleTowerEnv(gym.Env):
         rgb = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
         if rgb.shape[0] != self.preprocessing_size[0] or rgb.shape[1] != self.preprocessing_size[1]:
             rgb = cv2.resize(rgb, self.preprocessing_size, interpolation=cv2.INTER_AREA)
-
+        rgb = np.expand_dims(rgb, 2)
         if self._retro:
             rgb = np.float32(rgb) / 255.0
             new_obs = rgb
@@ -213,7 +215,10 @@ class GymObstacleTowerEnv(gym.Env):
 
 
         self.game_over = done
-        return rgb, reward, done, info
+        if self.original_obs:
+            return obs, reward, done, info
+        else:
+            return rgb, reward, done, info
 
     def _get_obs(self, obs):
         if self._retro:
@@ -247,7 +252,10 @@ class GymObstacleTowerEnv(gym.Env):
         rgb = self._get_obs(obs)
 
         self.game_over = False
-        return rgb
+        if self.original_obs:
+            return obs
+        else:
+            return rgb
         # obs is consist of image, keys, time. Let's use only image for this time
 
     def render(self, mode='human', close=False):
