@@ -7,7 +7,11 @@ import pygame
 import cv2
 import sys
 from stable_baselines.common.atari_wrappers import FrameStack
+import logging
 
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("gym_obstacle")
 
 class GymObstacleTowerEnv(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -52,7 +56,23 @@ class GymObstacleTowerEnv(gym.Env):
         self.game_over = False
         self.is_frame_stack = False
         self.original_obs = False
-        self.set_preprocessing()
+        self.action_skip = 0
+        # self.set_preprocessing()
+        self.activate_curriculum = False
+        self.curriculum_success_rate_threshold = 0
+        self.curriculum_success_rate = 0
+        self.curriculum_success_decay = 0.99
+        self.curriculum_evaluation_total = 0
+        self.curriculum_floor = 0
+        self.curriculum_logger_count = 0
+
+    def set_curriculum(self, success_rate_th=0.95):
+        self.activate_curriculum = True
+        self.curriculum_success_rate_threshold = success_rate_th
+        self.curriculum_floor = 0
+
+    def set_action_skip(self, skip=0):
+        self.action_skip = skip
 
     def set_preprocessing(self, size=(84, 84)):
         self.use_preprocessing = True
@@ -107,6 +127,7 @@ class GymObstacleTowerEnv(gym.Env):
     def frame_stack(self, frames):
         if not isinstance(self.env, FrameStack):
             self.env = FrameStack(self.env, frames)
+            self.observation_space = self.env.observation_space
             self.is_frame_stack = True
 
     def init(self, discrete=False):
@@ -213,6 +234,29 @@ class GymObstacleTowerEnv(gym.Env):
         self.last_action = action_vec
         self.last_action_raw = action
 
+        if self.activate_curriculum:
+            if done:
+                self.curriculum_success_rate = self.curriculum_success_rate * self.curriculum_success_decay
+                self.curriculum_evaluation_total += 1
+
+            elif reward == 1.0:
+                done = True
+                self.curriculum_success_rate = self.curriculum_success_rate * self.curriculum_success_decay \
+                                               + (1 - self.curriculum_success_decay) * reward
+                self.curriculum_evaluation_total += 1
+                remain_time = min(info['brain_info'].vector_observations[0, 6] / 10000.0, 0.5)
+                reward += self.curriculum_floor + remain_time
+
+            if self.curriculum_evaluation_total >= 30:
+                if self.curriculum_success_rate >= self.curriculum_success_rate_threshold:
+                    self.curriculum_evaluation_total = 0
+                    self.curriculum_success_rate = 0
+                    self.curriculum_floor += 1
+                elif self.curriculum_success_rate <= 0.03:
+                    self.curriculum_evaluation_total = 0
+                    self.curriculum_success_rate = 0
+                    self.curriculum_floor -= 1
+
 
         self.game_over = done
         if self.original_obs:
@@ -245,6 +289,11 @@ class GymObstacleTowerEnv(gym.Env):
         seed = self.new_seed()
         self.env.seed(seed)
 
+        if self.activate_curriculum:
+            self.env.floor(self.curriculum_floor)
+            logger.info('Cirriculum Status: Count: {}, Floor: {}, Rate: {:.3f}'.format(
+                self.curriculum_evaluation_total, self.curriculum_floor, self.curriculum_success_rate))
+
         obs = self.env.reset()
 
 
@@ -274,6 +323,8 @@ class GymObstacleTowerEnv(gym.Env):
             obs_surface = pygame.transform.scale(obs_surface, (420, 420))
             self.display.blit(obs_surface, (0, 0))
             pygame.display.update()
+            if self.render_timesleep is None:
+                self.render_timesleep = 20
             self.clock.tick_busy_loop(self.render_timesleep)
             if int(self.remain_time) % 1 == 0:
                 str1 = '\rkeys: {}, time: {:.2f}, action: {}, action_raw:{}, converted_action:{}'.format(
